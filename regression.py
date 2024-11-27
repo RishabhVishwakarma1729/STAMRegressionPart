@@ -1,8 +1,8 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.svm import SVR
@@ -18,6 +18,8 @@ if "feature_columns" not in st.session_state:
     st.session_state.feature_columns = None
 if "accuracies" not in st.session_state:
     st.session_state.accuracies = {}
+if "label_encoders" not in st.session_state:
+    st.session_state.label_encoders = {}
 
 # Function to load data
 def load_data(file):
@@ -29,13 +31,24 @@ def load_data(file):
         st.error("Unsupported file type. Please upload a CSV or Excel file.")
         return None
 
+# Function to encode categorical columns using LabelEncoder
+def encode_categorical_features(df, feature_columns):
+    label_encoders = {}
+    for feature in feature_columns:
+        if df[feature].dtype == 'object':  # Check if the column is categorical
+            label_encoder = LabelEncoder()
+            df[feature] = label_encoder.fit_transform(df[feature])
+            label_encoders[feature] = label_encoder
+    return df, label_encoders
+
 # Function to preprocess data
 def preprocess_data(df, target_column, feature_columns):
+    df, label_encoders = encode_categorical_features(df, feature_columns)  # Encoding categorical features
     X = df[feature_columns]
     y = df[target_column]
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    return X_scaled, y, scaler
+    return X_scaled, y, scaler, label_encoders
 
 # Streamlit app setup
 st.title("Machine Learning Regression App")
@@ -53,13 +66,22 @@ if uploaded_file:
         feature_columns = st.multiselect("Select feature columns", [col for col in df.columns if col != target_column])
 
         if feature_columns:
-            X, y, scaler = preprocess_data(df, target_column, feature_columns)
+            X, y, scaler, label_encoders = preprocess_data(df, target_column, feature_columns)
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
             # Storing data in session state
             st.session_state.scaler = scaler
             st.session_state.feature_columns = feature_columns
+            st.session_state.label_encoders = label_encoders
             st.success("Data preprocessed successfully!")
+
+            # Display label encodings to the user
+            if label_encoders:
+                st.write("### Label Encodings:")
+                for feature, encoder in label_encoders.items():
+                    st.write(f"{feature}:")
+                    encoding_dict = dict(zip(encoder.classes_, encoder.transform(encoder.classes_)))
+                    st.write(encoding_dict)
 
             # Training models with default parameters (no user inputs)
             st.write("### Train Models")
@@ -139,4 +161,3 @@ if uploaded_file:
                         for model_name, model in st.session_state.models.items():
                             pred = model.predict(new_data_scaled)
                             st.write(f"{model_name} Prediction: {pred[0]:.2f}")
-
